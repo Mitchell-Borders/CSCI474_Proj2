@@ -3,41 +3,49 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#define NUM_THREADS	5
+#define NUM_THREADS	3
 
-void* PrintHello(void* threadid)
-{
-    int m = *((int*)threadid);
-    printf("\n%d: Hello World!\n", m);
+void* CalculateFirstHalf(void* threadid) {
+    FILE* inFile = fopen("data1.dat", "r");
+    int total = 0;
+    for(int k = 0; k < 500; k++){
+        int lineNum = 0;
+        fscanf(inFile, "%d\n", &lineNum);
+        total += lineNum;
+    }
     pthread_exit(NULL);
 }
 
-void* CalculateFirstHalf(void* threadid) {
-
+void* CalculateSecondHalf(void* threadid){
+    FILE* inFile = fopen("data1.dat", "r");
+    int total = 0;
+    for(int k = 500; k < 1001; k++){
+        int lineNum = 0;
+        fscanf(inFile, "%d\n", &lineNum);
+        total += lineNum;
+    }
+    pthread_exit(NULL);
 }
+
+void* CalculateDataFile(void* threadid){
+    pthread_t workerThreads[2];
+    
+    pthread_create(&workerThreads[0], NULL, CalculateFirstHalf, NULL);
+    pthread_create(&workerThreads[1], NULL, CalculateSecondHalf, NULL);
+
+    pthread_join(workerThreads[0], NULL);
+    pthread_join(workerThreads[1], NULL);
+
+    pthread_exit(NULL);
+}
+
 
 int main(int argc, char* argv[])
 {
-    pthread_t threads[3];
+    pthread_t serverThread[1];
 
+    pthread_create(&serverThread[0], NULL, CalculateDataFile, NULL);
 
-
-
-
-    pthread_t threads[NUM_THREADS];
-    int rc, t, i;
-    int data[NUM_THREADS];
-    for (t = 0; t < NUM_THREADS; t++) {
-        printf("Creating thread %d\n", t);
-        data[t] = t;
-        rc = pthread_create(&threads[t], NULL, PrintHello, (void*)&data[t]);
-        if (rc) {
-            printf("ERROR; return code from pthread_create() is %d\n", rc);
-            exit(-1);
-        }
-    }
-
-    for (i = 0; i < NUM_THREADS; i++)
-        pthread_join(threads[i], NULL);
+    pthread_join(serverThread[0], NULL);
     pthread_exit(NULL);
 }
