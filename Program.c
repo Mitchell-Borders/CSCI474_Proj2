@@ -5,24 +5,13 @@
 #include <unistd.h>
 #include <semaphore.h> 
 #define SHARED 1
-sem_t empty, full;    /* the global semaphores */
-int data;             /* shared buffer         */
-int numIters;
-int total;
+sem_t workerDone, calculating; // Semaphores
+int data; // Buffer
+int total, worker1sum, worker2sum;
 
-void Producer(int calculated) {
-    sem_wait(&empty);
-    data = calculated;
-    sem_post(&full);
-}
 
-void Consumer() {
-    sem_wait(&full);
-    total += data;
-    sem_post(&empty);
-}
-
-void* CalculateFirstHalf(void* threadid) {
+void* WorkerThreadOne(void* threadid) {
+    sem_wait(&calculating);
     FILE* inFile = fopen("data1.dat", "r");
     int total = 0;
     for(int k = 0; k < 500; k++){
@@ -30,46 +19,60 @@ void* CalculateFirstHalf(void* threadid) {
         fscanf(inFile, "%d\n", &lineNum);
         total += lineNum;
     }
-    printf("ACTUAL TOTAL 1: %d \n", total);
-    Producer(total);
-    Consumer();
+    worker1sum = total;
+    sem_post(&calculating);
+    sem_post(&workerDone);
     pthread_exit(NULL);
 }
 
-void* CalculateSecondHalf(void* threadid){
+void* WorkerThreadTwo(void* threadid){
+    sem_wait(&calculating);
     FILE* inFile = fopen("data1.dat", "r");
     int total = 0;
+    fseek(inFile, (5 * 500), SEEK_SET);
     for(int k = 500; k < 1001; k++){
         int lineNum = 0;
         fscanf(inFile, "%d\n", &lineNum);
         total += lineNum;
     }
-    printf("ACTUAL TOTAL 2: %d \n", total);
-    Producer(total);
-    Consumer();
+    worker2sum = total;
+    sem_post(&calculating);
+    sem_post(&workerDone);
     pthread_exit(NULL);
 }
 
-void* ServerThread(void* threadid){
+void* ServerThread(){
+    printf("server started\n");
+    // Simulate starting threads
+    printf("Server sends a start signal to the worker thread 1\n");
+    printf("Server sends a start signal to the worker thread 2\n");
 
+    //Get sum of threads
+    sem_wait(&workerDone);
+    printf("Server receives a completion signal from Worker thread 1\n Worker thread 1 result: %d\n", worker1sum);
+    sem_wait(&workerDone);
+    printf("Server receives a completion signal from Worker thread 2\n Worker thread 2 result: %d\n", worker2sum);
+
+    printf("Datafile total: %d\n", (worker1sum + worker2sum));
+    
+    printf("server done\n");
+    pthread_exit(NULL);
 }
 
 int main(int argc, char* argv[])
 {
-    pthread_t pid, cid1, cid2;  
-    pthread_create(&pid, NULL, ServerThread, NULL);
-    printf("main started\n");
-    sem_init(&empty, SHARED, 1);  /* sem empty = 1 */
-    sem_init(&full, SHARED, 0);   /* sem full = 0  */
+    // Create semeaphores
+    sem_init(&calculating, SHARED, 1);
+    sem_init(&workerDone, SHARED, 0); 
 
-    printf("Server sends a start signal to the worker thread 1\n");
-    pthread_create(&cid1, NULL, CalculateFirstHalf, NULL);
+    pthread_t pid, cid1, cid2;  
+    // Create threads
+    pthread_create(&pid, NULL, ServerThread, NULL);
+    pthread_create(&cid1, NULL, WorkerThreadOne, NULL);
+    pthread_create(&cid2, NULL, WorkerThreadTwo, NULL);
+
+    // Get thread results
     pthread_join(cid1, NULL);
-    printf("Server receives a completion signal from Worker thread 1\n Worker thread 1 result: %d\n", data);
-    printf("Server sends a start signal to the worker thread 2\n");
-    pthread_create(&cid2, NULL, CalculateSecondHalf, NULL);
     pthread_join(cid2, NULL);
-    printf("Server receives a completion signal from Worker thread 1\n Worker thread 2 result: %d\n", data);
     pthread_join(pid, NULL);
-    printf("main done\n");
 }
